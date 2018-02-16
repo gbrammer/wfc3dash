@@ -10,7 +10,8 @@ Download and instll the code repositories.  In the shell command line:
 git clone https://github.com/gbrammer/reprocess_wfc3.git
 cd reprocess_wfc3
 python setup.py install
-    
+cd ..
+
 # This repository
 git clone https://github.com/gbrammer/wfc3dash.git
 cd wfc3dash
