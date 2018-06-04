@@ -1,9 +1,12 @@
 
 import os
+import glob
+
 from wfc3dash import process_raw
 
 # https://github.com/gbrammer/grizli/
 from grizli import utils, prep
+from grizli.pipeline import auto_script
 import grizli.ds9
 
 #######################
@@ -36,15 +39,24 @@ for file in ima_files:
 
     visits.append(visit)
 
+# Or use grizli to generate the exposure-level visits
+visits, _, _ = auto_script.parse_visits(field_root='dash', HOME_PATH='/tmp/', is_dash=True)
+
 # Manual alignment, shifts can be very large
 ds9 = grizli.ds9.DS9()
 for visit in visits:
-    grizli.prep.manual_alignment(visit, ds9, reference='ipac_acs_bright.reg')
+    prep.manual_alignment(visit, ds9, reference='ipac_acs_bright.reg')
 
 # Astrometric alignment file, simply columns of RA/Dec
 radec = 'ipac_acs_galaxy.radec'
 
-# Run the aligment script
+# Run the preprocessing script:
+#     - Relative alignment (DASH drifts, pointing errors)
+#     - Align absolute astrometry to reference catalog (here COSMOS ACS)
+#     - Flag cosmic rays
+#     - Background subtraction
+#     - Fill centers of saturated stars with ePSF model
+#     - Visit-level catalog & combined image
 for visit in visits:
-    status = grizli.prep.process_direct_grism_visit(direct=visit, grism={}, radec=radec, skip_direct=False, align_mag_limits=[14,24], tweak_max_dist=8, tweak_threshold=8, align_tolerance=8, tweak_fit_order=2)
+    status = prep.process_direct_grism_visit(direct=visit, grism={}, radec=radec, skip_direct=False, align_mag_limits=[14,24], tweak_max_dist=8, tweak_threshold=8, align_tolerance=8, tweak_fit_order=2)
 
