@@ -64,4 +64,8 @@ for visit in visits:
                                     align_mag_limits=[14,24], 
                                     tweak_max_dist=8, tweak_threshold=8, 
                                     align_tolerance=8, tweak_fit_order=2)
-
+    
+    # Refine visit-level background with SEP/Sextractor background measured
+    # on the deeper combined image
+    prep.blot_background(visit=visit, verbose=True, 
+                        bkg_params={'bw':64, 'bh':64, 'fw':3, 'fh':3})
