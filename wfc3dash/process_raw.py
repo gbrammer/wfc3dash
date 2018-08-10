@@ -8,7 +8,7 @@ To use, download *just* the RAW files for a given visit/program.
 
 """
 
-def run_all():
+def run_all(skip_first_read=True):
     """
     Run splitting script on all RAW files in the working directory.  
     
@@ -45,9 +45,9 @@ def run_all():
         wfc3tools.calwf3(file)
         
         # Split into individual FLTs
-        split_ima_flt(file=file.replace('_raw','_ima'))
+        split_ima_flt(file=file.replace('_raw','_ima'), skip_first_read=skip_first_read)
         
-def split_ima_flt(file='icxe15x0q_ima.fits'):
+def split_ima_flt(file='icxe15x0q_ima.fits', skip_first_read=True):
     """
     Pull out reads of an IMA file into individual "FLT" files
     """
@@ -122,7 +122,7 @@ def split_ima_flt(file='icxe15x0q_ima.fits'):
     h_sci['CRPIX1'] = 507
     h_sci['CRPIX2'] = 507
     letters = 'abcdefghijklmno'
-    for i in range(1,NSAMP-1):
+    for i in range(1*skip_first_read,NSAMP-1):
         h_0['EXPTIME'] = final_exptime[i]
         h_0['IREAD'] = i
         hdu = pyfits.HDUList(pyfits.PrimaryHDU(header=h_0))
