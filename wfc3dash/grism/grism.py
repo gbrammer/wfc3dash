@@ -463,16 +463,21 @@ def extract_spectrum(grp, id, size=32):
     
     args['min_sens'] = 1.e-4
     args['min_mask'] = 1.e-4
+        
+    beams = grp.get_beams(id, size=size, min_mask=args['min_mask'], 
+                          min_sens=args['min_sens'], mask_resid=False)
+                              
+    mb = run_align_dash(beams, args)
+    return mb
+    
+def run_align_dash(beams, args):
     
     spl = utils.bspline_templates(wave=np.arange(8000, 1.8e4, 10), df=3)
     
-    beams = grp.get_beams(id, size=size, min_mask=args['min_mask'], 
-                          min_sens=args['min_sens'], mask_resid=False)
-                          
     mb = multifit.MultiBeam(beams, group_name=args['group_name'], 
                             fcontam=args['fcontam'], 
-                            min_sens=args['min_sens'],
-                            min_mask=args['min_mask'], psf=False)
+                            min_sens=1.e-4,
+                            min_mask=1.e-4, psf=False)
     
     tfit = mb.template_at_z(templates=spl)
     fig = mb.oned_figure(tfit=tfit, units='flam')
@@ -507,6 +512,8 @@ def extract_spectrum(grp, id, size=32):
     fig.savefig(f"{args['group_name']}_{id:05d}.offs.1d.png")
     hdu, fig = mb.drizzle_grisms_and_PAs(tfit=tfit, diff=True)
     fig.savefig(f"{args['group_name']}_{id:05d}.offs.2d.png")
+    
+    plt.close('all')
     
     return mb
     
