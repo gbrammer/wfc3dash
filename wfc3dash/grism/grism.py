@@ -379,10 +379,12 @@ def finish_group(assoc, filters=['F814W','F105W','F140W','F125W','F160W'], phot_
         else:
             pline['kernel'] = 'point'
 
-        min_sens = 0.001
+        min_sens = 1.e-4
+        min_mask = 1.e-4
+        
         fit_trace_shift = True
         
-        auto_script.generate_fit_params(field_root=root, prior=None, MW_EBV=0.0, pline=pline, fit_only_beams=True, run_fit=True, poly_order=7, fsps=True, min_sens=min_sens, sys_err=0.03, fcontam=0.2, zr=[0.05, 3.4], save_file=args_file, fit_trace_shift=fit_trace_shift, include_photometry=False, use_phot_obj=False)
+        auto_script.generate_fit_params(field_root=root, prior=None, MW_EBV=0.0, pline=pline, fit_only_beams=True, run_fit=True, poly_order=7, fsps=True, min_sens=min_sens, min_mask=min_mask, sys_err=0.03, fcontam=0.2, zr=[0.05, 3.4], save_file=args_file, fit_trace_shift=fit_trace_shift, include_photometry=False, use_phot_obj=False)
         
         os.system(f'cp {args_file} fit_args.npy')
 
