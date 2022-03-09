@@ -39,9 +39,6 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
     import astropy.time
     import astropy.table
     
-    if __name__ == '__main__':
-        from wfc3dash.grism.grism import align_visit
-    
     global PATHS
     
     os.chdir(HOME_PATH)
