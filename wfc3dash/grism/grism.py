@@ -15,7 +15,7 @@ plt.rcParams['image.interpolation'] = 'Nearest'
 #HOME_PATH = '/home/ec2-user/telescopes/notebooks/Dash'
 HOME_PATH = '/GrizliImaging/'
 
-os.chdir(HOME_PATH)
+# os.chdir(HOME_PATH)
 
 import astropy.wcs as pywcs
 import astropy.io.fits as pyfits
