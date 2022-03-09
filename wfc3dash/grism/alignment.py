@@ -129,6 +129,7 @@ def get_beam_kernel(file):
 def align_dash_exposure(flt_file='iehn5vr8a_flt.fits', verbose=0):
     """
     """
+    import matplotlib.pyplot as plt
     
     # Detect grism "objects"
     im = pyfits.open(flt_file)
