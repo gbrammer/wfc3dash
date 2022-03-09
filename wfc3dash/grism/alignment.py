@@ -118,7 +118,7 @@ def get_beam_kernel(file):
     kx = kernel*1
     kx[:, np.abs(beam.wave-1.39e4) < 2300] = 0
 
-    plt.imshow(kernel)
+    #plt.imshow(kernel)
 
     beam.sh
 
