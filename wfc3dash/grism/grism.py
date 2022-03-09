@@ -522,7 +522,7 @@ def get_random_visit():
     all_assocs = db.SQL(f"""SELECT DISTINCT(assoc_name) 
                            FROM assoc_table
                            WHERE proposal_id = '16443'
-                           AND status=0""")
+                           AND status=12""")
     
     if len(all_assocs) == 0:
         return None
@@ -541,7 +541,7 @@ def run_one(clean=2, sync=True, align_kwargs={}):
     nassoc = db.SQL("""SELECT count(distinct(assoc_table))
                        FROM assoc_table
                        WHERE proposal_id = '16443'
-                       AND status = 0""")['count'][0] 
+                       AND status = 12""")['count'][0] 
     
     assoc = get_random_visit()
     if assoc is None:
