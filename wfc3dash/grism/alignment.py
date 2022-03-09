@@ -7,7 +7,7 @@ import astropy.io.fits as pyfits
 import scipy.ndimage as nd
 from scipy.optimize import minimize
 
-from grizli import multifit, prep, utils
+from grizli import multifit, prep, utils, model
 import golfir.utils
 
 spl = utils.bspline_templates(wave=np.arange(8000, 1.8e4, 10), df=3)
