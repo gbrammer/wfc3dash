@@ -37,6 +37,9 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
     from stwcs import updatewcs    
     from wfc3dash import process_raw
     
+    if __name__ == '__main__':
+        from wfc3dash.grism.grism import align_grism
+    
     global PATHS
     
     os.chdir(HOME_PATH)
@@ -72,14 +75,17 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
     
     # FLT copies
     os.chdir(PATHS['prep'])
+    
     files = glob.glob(f'../RAW/*[a-o]_flt.fits')
     files.sort()
+    
     for rfile in files:
         file = os.path.basename(rfile)
         prep.fresh_flt_file(file)
         updatewcs.updatewcs(os.path.basename(file), verbose=False, 
                             use_db=False)
     
+    # By "visit", which are the DASH groups
     visits = []
     qfiles = glob.glob('../RAW/*q_flt.fits')
     qfiles.sort()
@@ -95,11 +101,19 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
         if not os.path.exists(f"{visit['product']}_column.png"):
             prep.visit_grism_sky(grism=visit)
 
-    for visit in visits:
         align_visit(visit, **align_kwargs)
     
+        footprints = []
+        for file in visit['files']:
+            im = pyfits.open(file)
+            wcs = pywcs.WCS(im[0].header, relax=True)
+            footprints.append(utils.SRegion(wcs).shapely[0])
+        
+        visit['footprints'] = footprints
+        
     finish_group(assoc, **kwargs)
-    
+
+
 def align_visit(visit, flag_crs=True, driz_cr_kwargs={'driz_cr_snr_grow':3}, **kwargs):
     """
     """

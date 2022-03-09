@@ -16,5 +16,5 @@ setup(name='wfc3dash',
       author='Gabriel Brammer',
       author_email='gbrammer@gmail.com',
       url='https://github.com/gbrammer/wfc3dash/',
-      packages=['wfc3dash'],
+      packages=['wfc3dash', 'wfc3dash/grism'],
      )
