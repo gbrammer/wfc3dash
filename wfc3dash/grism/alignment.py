@@ -1,6 +1,8 @@
-import astropy.io.fits as pyfits
+import numpy as np
 from skimage.feature import peak_local_max
 from skimage.feature import match_template
+
+import astropy.io.fits as pyfits
 
 import scipy.ndimage as nd
 from scipy.optimize import minimize
@@ -9,7 +11,6 @@ from grizli import multifit, prep, utils
 import golfir.utils
 
 spl = utils.bspline_templates(wave=np.arange(8000, 1.8e4, 10), df=3)
-
 
 def add_ytrace_offset(self, yoffset):
     """Add an offset in Y to the spectral trace
