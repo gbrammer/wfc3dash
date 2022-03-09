@@ -7,7 +7,7 @@ spl = utils.bspline_templates(wave=np.arange(8000, 1.8e4, 10), df=3)
 
 import scipy.ndimage as nd
 import golfir.utils
-from grizli import prep
+from grizli import prep, utils
 from scipy.optimize import minimize
 
 def add_ytrace_offset(self, yoffset):
