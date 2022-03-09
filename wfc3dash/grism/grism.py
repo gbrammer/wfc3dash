@@ -83,8 +83,9 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
     
     for rfile in files:
         file = os.path.basename(rfile)
-        prep.fresh_flt_file(file)
-        updatewcs.updatewcs(os.path.basename(file), verbose=False, 
+        if not os.path.exists(file):
+            prep.fresh_flt_file(file)
+            updatewcs.updatewcs(os.path.basename(file), verbose=False, 
                             use_db=False)
     
     # By "visit", which are the DASH groups
@@ -100,13 +101,23 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
         visit['files'].sort()
         visits.append(visit)
     
+    failed = []
+    
     for visit in visits:
         if not os.path.exists(f"{visit['product']}_column.png"):
             prep.visit_grism_sky(grism=visit)
 
         if not os.path.exists(visit['product']+'.log.txt'):
-            align_visit(visit, **align_kwargs)
-    
+            try:
+                align_visit(visit, **align_kwargs)
+            except:
+                failed.append(visit['product'])
+                msg = f"{visit['product']} failed"
+                utils.log_comment(utils.LOGFILE, msg, verbose=True)
+                
+                os.system(f"rm {visit['product']}*")
+                continue
+                
         footprints = []
         for file in visit['files']:
             im = pyfits.open(file)
@@ -114,6 +125,12 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
             footprints.append(utils.SRegion(wcs).shapely[0])
         
         visit['footprints'] = footprints
+    
+    ok_visits = []
+    for v in visits:
+        if v['product'] not in failed:
+            ok_visits.append(v)
+    visits = ok_visits
     
     # First sync
     visit_processor.update_assoc_status(assoc, status=2)
@@ -183,7 +200,6 @@ def align_visit(visit, flag_crs=True, driz_cr_kwargs={'driz_cr_snr_grow':3}, **k
     from .alignment import align_dash_exposure
 
     global PATHS
-    
 
     os.chdir(PATHS['prep'])
     ref_file = os.path.join(HOME_PATH, 
