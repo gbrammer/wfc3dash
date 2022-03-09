@@ -481,9 +481,9 @@ def run_align_dash(beams, args):
     
     tfit = mb.template_at_z(templates=spl)
     fig = mb.oned_figure(tfit=tfit, units='flam')
-    fig.savefig(f"{args['group_name']}_{id:05d}.init.1d.png")
+    fig.savefig(f"{args['group_name']}_{beams[0].id:05d}.init.1d.png")
     hdu, fig = mb.drizzle_grisms_and_PAs(tfit=tfit, diff=True)
-    fig.savefig(f"{args['group_name']}_{id:05d}.init.2d.png")
+    fig.savefig(f"{args['group_name']}_{beams[0].id:05d}.init.2d.png")
     
     for i in range(mb.N):
         mbi = multifit.MultiBeam(mb.beams[i:i+1], fcontam=0.,
@@ -509,9 +509,9 @@ def run_align_dash(beams, args):
     
     tfit = mb.template_at_z(templates=spl)
     fig = mb.oned_figure(tfit=tfit, units='flam')
-    fig.savefig(f"{args['group_name']}_{id:05d}.offs.1d.png")
+    fig.savefig(f"{args['group_name']}_{beams[0].id:05d}.offs.1d.png")
     hdu, fig = mb.drizzle_grisms_and_PAs(tfit=tfit, diff=True)
-    fig.savefig(f"{args['group_name']}_{id:05d}.offs.2d.png")
+    fig.savefig(f"{args['group_name']}_{beams[0].id:05d}.offs.2d.png")
     
     plt.close('all')
     
