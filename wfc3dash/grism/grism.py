@@ -320,7 +320,7 @@ def finish_group(assoc, filters=['F814W','F105W','F140W','F125W','F160W'], phot_
     grism_files.sort()
     
     _h, ir_wcs = utils.make_maximal_wcs(grism_files, pixel_scale=0.1, 
-                                        get_hdu=False, pad=64)
+                                        get_hdu=False, pad=128)
                                         
     #### Reference mosaic
     root = assoc    
