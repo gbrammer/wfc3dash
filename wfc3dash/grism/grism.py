@@ -123,7 +123,7 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
         footprints = []
         for file in visit['files']:
             im = pyfits.open(file)
-            wcs = pywcs.WCS(im[0].header, relax=True)
+            wcs = pywcs.WCS(im[1].header, relax=True)
             footprints.append(utils.SRegion(wcs).shapely[0])
         
         visit['footprints'] = footprints
