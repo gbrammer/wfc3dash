@@ -1,0 +1,25 @@
+numpy 
+cython
+
+astropy
+scipy
+matplotlib
+scikit-image
+tqdm
+
+wfc3tools
+stwcs
+drizzlepac
+astroquery
+
+pyyaml
+
+sep
+
+# hstcalib from conda
+
+git+https://github.com/gbrammer/reprocess_wfc3.git
+git+https://github.com/gbrammer/grizli.git
+git+https://github.com/gbrammer/tristars.git
+git+https://github.com/gbrammer/mastquery.git
+git+https://github.com/gbrammer/golfir.git
