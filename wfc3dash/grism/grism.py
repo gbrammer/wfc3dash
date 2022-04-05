@@ -21,11 +21,13 @@ import astropy.wcs as pywcs
 import astropy.io.fits as pyfits
 import astropy.units as u
 
+# https://github.com/gbrammer/grizli
 import grizli
 from grizli import utils, model, multifit, prep
 from grizli.pipeline import auto_script
 from grizli.aws import db, visit_processor
 
+# https://github.com/gbrammer/golfir
 import golfir.utils
 
 PATHS = None
@@ -168,7 +170,15 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
     
     # Sync
     os.chdir(os.path.join(HOME_PATH, assoc))
-    np.save(f'Prep/{assoc}_visits.npy', [visits, [], None])
+    
+    files = []
+    for v in visits:
+        files.extend([os.path.join('./Prep/', f) for f in v['files']])
+    
+    info = utils.get_flt_info(files)
+    
+    #np.save(f'Prep/{assoc}_visits.npy', [visits, [], None])
+    auto_script.write_visit_info(visits, [], info, root=assoc, path='./Prep')
     
     os.system(f'rm Prep/*bkg.fits')
     
