@@ -7,6 +7,9 @@ matplotlib
 scikit-image
 tqdm
 
+# newer version causes problems
+stsci.image==2.3.3
+
 wfc3tools
 stwcs
 drizzlepac
