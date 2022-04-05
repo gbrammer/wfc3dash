@@ -1,13 +1,17 @@
 import numpy as np
+import scipy.ndimage as nd
+from scipy.optimize import minimize
+
 from skimage.feature import peak_local_max
 from skimage.feature import match_template
 
 import astropy.io.fits as pyfits
+import astropy.units as u
 
-import scipy.ndimage as nd
-from scipy.optimize import minimize
-
+# https://github.com/gbrammer/grizli
 from grizli import multifit, prep, utils, model
+
+# https://github.com/gbrammer/golfir
 import golfir.utils
 
 spl = utils.bspline_templates(wave=np.arange(8000, 1.8e4, 10), df=3)
