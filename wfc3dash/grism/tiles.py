@@ -116,6 +116,11 @@ def process_tile(tile='01.01', filters=['F350LP', 'F435W', 'F475W', 'F606W', 'F7
                               kernel='square', s3output=None, 
                               gzip_output=False, clean_flt=True)
     
+    files = glob.glob(f'{root}*dr*fits')
+    if len(files) == 0:
+        db.execute(f"update cosmos_tiles set status=4 where tile = '{tile}'")
+        return True
+        
     golfir.catalog.make_charge_detection(root, ext='ir')
     
     phot = auto_script.multiband_catalog(field_root=root) #, **phot_kwargs)
