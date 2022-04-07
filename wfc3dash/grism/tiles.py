@@ -146,7 +146,7 @@ def process_tile(tile='01.01', filters=TILE_FILTERS):
                 phot.remove_column(c)
     
     for c in phot.colnames:
-        if c in ['ra','dec']:
+        if c in ['ra','dec','x_world','y_world']:
             continue
             
         if phot[c].dtype == np.float64:
@@ -373,7 +373,10 @@ def cosmos_mosaic_from_tiles(assoc, filt='ir', clean=True):
             'cxx_image', 'cyy_image', 'cxy_image',
             'cflux', 'flux',
             'cpeak', 'peak', 'xcpeak', 'ycpeak', 'xpeak', 'ypeak',
-            'flag', 'x_image', 'y_image', 'x_world', 'y_world',
+            'flag',
+            'x_image', 'y_image',
+            #'x_world', 'y_world',
+            'ra as x_world', 'dec as y_world', 
             'flux_iso', 'fluxerr_iso', 'area_iso', 'mag_iso', 'kron_radius',
             'kron_rcirc', 'flux_auto', 'fluxerr_auto', 'bkg_auto',
             'flag_auto', 'area_auto', 'flux_radius_flag', 'flux_radius_20',
@@ -485,30 +488,32 @@ def redo_model_from_mosaic(assoc, **kwargs):
     import wfc3dash.grism.tiles
     from grizli.aws import db, visit_processor
     
-    if 0:
-        assoc = 'j100028p0215_0417_dk1_id581181_wfc3ir_f160w-g141'
+    # if 0:
+    #     assoc = 'j100028p0215_0417_dk1_id581181_wfc3ir_f160w-g141'
     
     os.chdir(wfc3dash.grism.grism.HOME_PATH)
     
     visit_processor.update_assoc_status(assoc, status=21)
     
-    os.system(f'aws s3 rm --recursive s3://grizli-v2/HST/Pipeline/{assoc} --exclude "*" --include "Extractions/*" --include "Prep/*GrismFLT*"')
+    os.system(f'aws s3 rm --recursive s3://grizli-v2/HST/Pipeline/{assoc} --exclude "*" --include "Extractions/*" --include "Prep/*GrismFLT*" --include "Prep/{assoc}-ir*" ')
     
-    os.system(f"""aws s3 sync s3://grizli-v2/HST/Pipeline/{assoc}/ ./{assoc} --exclude "*" --include "Prep/*flt.fits" --include "Prep/{assoc}-ir*"
-    """)
+    os.system(f'aws s3 sync s3://grizli-v2/HST/Pipeline/{assoc}/ ./{assoc} --exclude "*" --include "Prep/*flt.fits"')
     
-    utils.LOGFILE = os.path.join(wfc3dash.grism.grism.HOME_PATH, assoc, 
-                                 assoc + '_grism.log.txt')
-                                 
     if not os.path.exists(f'{assoc}/Extractions'):
         os.mkdir(f'{assoc}/Extractions')
     
+    utils.LOGFILE = os.path.join(wfc3dash.grism.grism.HOME_PATH, assoc, 
+                                 'Extractions', 
+                                 assoc + '_grism.log.txt')
+                                     
     os.chdir(f'{assoc}/Prep')
     
     wfc3dash.grism.grism.compute_grism_contamination(assoc, **kwargs)
     
+    wfc3dash.grism.grism.sync_products(assoc)
     
-    
+    visit_processor.update_assoc_status(assoc, status=22)
+
 
 def check_phot():
     """
@@ -556,3 +561,32 @@ _radius, flux_auto, flux_aper_1, f105w_tot_corr, f125w_tot_corr, f140w_tot_corr,
     sub['img'] = [f'<a href="https://grizli-cutout.herokuapp.com/thumb?coords={ra}%20{dec}&size=30" /> <img src="https://grizli-cutout.herokuapp.com/thumb?coords={ra}%20{dec}&size=12" height=230px> </a>' for ra, dec in zip(sub['ra'], sub['dec'])]
 
     sub['tile', 'olap', 'ra','dec','hmag','ih','img'].write_sortable_html('test.html', localhost=False, max_lines=5000)
+
+def compare_to_deeper():
+    """
+    Compare extractions in DASH and a pointed visit
+    """
+    
+    deep_visit = 'j100028p0215_0417_dk1_id581181_wfc3ir_f160w-g141'
+    dash_visit = 'j100028p0215_0651_ehn_cosmos-g141-169_wfc3ir_g141'
+    
+    args0 = np.load(f'{deep_visit}_fit_args.npy', allow_pickle=True)[0]
+    args1 = np.load(f'{dash_visit}_fit_args.npy', allow_pickle=True)[0]
+    
+    id = 13046
+    id = 115672
+    
+    mb0 = multifit.MultiBeam(f'{deep_visit}_{id:05d}.beams.fits', **args0)
+    mb1 = multifit.MultiBeam(f'{dash_visit}_{id:05d}.beams.fits', **args1)
+    
+    s0 = mb0.oned_spectrum(tfit=tfit0)['G141']
+    s1 = mb1.oned_spectrum(tfit=tfit1)['G141']
+    
+    plt.plot(s0['wave'], s0['flux'])
+    plt.plot(s1['wave'], s1['flux'])
+    
+    plt.plot(s0['wave'], s0['err'])
+    plt.plot(s1['wave'], s1['err'])
+    
+    
+    
