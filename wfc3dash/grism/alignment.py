@@ -30,7 +30,7 @@ def add_ytrace_offset(self, yoffset):
     self.ytrace_beam, self.lam_beam = self.conf.get_beam_trace(
                         x=(self.xc+self.xcenter-self.pad)/self.grow,
                         y=(self.yc+self.ycenter-self.pad)/self.grow,
-                        dx=(self.dx+self.xcenter*0+self.xoff)/self.grow,
+                        dx=(self.dx+self.xcenter*0+self.xoffset)/self.grow,
                         beam=self.beam, fwcpos=self.fwcpos)
 
     self.ytrace_beam *= self.grow
@@ -55,7 +55,7 @@ def add_ytrace_offset(self, yoffset):
     self.ytrace, self.lam = self.conf.get_beam_trace(
                         x=(self.xc+self.xcenter-self.pad)/self.grow,
                         y=(self.yc+self.ycenter-self.pad)/self.grow,
-                        dx=(self.dxfull+self.xcenter+self.xoff)/self.grow,
+                        dx=(self.dxfull+self.xcenter+self.xoffset)/self.grow,
                         beam=self.beam, fwcpos=self.fwcpos)
 
     self.ytrace *= self.grow
@@ -271,7 +271,7 @@ def align_dash_exposure(flt_file='iehn5vr8a_flt.fits', verbose=0):
             #print(shift)
 
             self = mb.beams[0].beam
-            self.xoff = shift[0]
+            self.xoffset = shift[0]
             add_ytrace_offset(self, shift[1])
 
             tfit = mb.template_at_z(templates=spl)
