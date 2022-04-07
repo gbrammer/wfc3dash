@@ -475,7 +475,7 @@ def fit_beam_shift(mb, xbounds=((-5,5), (-4,4)), ybounds=((-5,5), (-5,5)), verbo
         #print(shift)
 
         self = mb.beams[0].beam
-        self.xoff = shift[0]
+        self.xoffset = shift[0]
         add_ytrace_offset(self, shift[1])
 
         tfit = mb.template_at_z(templates=spl)
@@ -547,7 +547,8 @@ def extract_spectrum(grp, id, size=32):
                               
     mb = run_align_dash(beams, args)
     return mb
-    
+
+
 def run_align_dash(beams, args):
     
     spl = utils.bspline_templates(wave=np.arange(8000, 1.8e4, 10), df=3)
