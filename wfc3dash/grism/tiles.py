@@ -38,7 +38,7 @@ def make_cosmos_tiles():
     extra = " AND file like 'iehn%%' "
 
     filt = 'F814W'
-    extra = ""
+    extra = ''
     
     fig, tab = tile_mosaic.exposure_map(ra, dec, rsize, name, 
                                         filt=filt.upper(), s0=18, 
@@ -86,13 +86,17 @@ def make_cosmos_tiles():
     # To do: fix footprint in cosmos_tiles
     # ...
     
-    if 0:
-        # Find tiles that overlap dash visit
-        db.SQL("select distinct(tile) from cosmos_tiles_tmp t, exposure_files e where e.assoc = 'j100040p0216_2190_ehn_cosmos-g141-156_wfc3ir_g141' AND polygon(e.footprint) && polygon(t.footprint)")
-        
-        
+    # if 0:
+    #     # Find tiles that overlap dash visit
+    #     db.SQL("select distinct(tile) from cosmos_tiles_tmp t, exposure_files e where e.assoc = 'j100040p0216_2190_ehn_cosmos-g141-156_wfc3ir_g141' AND polygon(e.footprint) && polygon(t.footprint)")
+    #     
 
-def process_tile(tile='01.01', filters=['F350LP', 'F435W', 'F475W', 'F606W', 'F775W', 'F814W', 'F850LP', 'F098M', 'F105W', 'F110W', 'F125W', 'F140W', 'F160W']):
+
+TILE_FILTERS = ['F350LP', 'F435W', 'F475W', 'F606W', 'F775W', 
+                'F814W', 'F850LP', 
+                'F098M', 'F105W', 'F110W', 'F125W', 'F140W', 'F160W']
+
+def process_tile(tile='01.01', filters=TILE_FILTERS):
     """
     """
     import numpy as np
@@ -135,9 +139,6 @@ def process_tile(tile='01.01', filters=['F350LP', 'F435W', 'F475W', 'F606W', 'F7
     golfir.catalog.make_charge_detection(root, ext='ir')
     
     phot = auto_script.multiband_catalog(field_root=root) #, **phot_kwargs)
-    # for c in ['number']:
-    #     if c in phot.colnames:
-    #         phot.remove_column(c)
     
     for i in [4,5,6]:
         for c in phot.colnames:
@@ -189,7 +190,7 @@ def process_tile(tile='01.01', filters=['F350LP', 'F435W', 'F475W', 'F606W', 'F7
     db.send_to_database('cosmos_tile_phot', phot, if_exists='append')
     
     if 'id' not in cols:
-        # Add id column
+        # Add unique id index column
         db.execute('ALTER TABLE cosmos_tile_phot ADD COLUMN id SERIAL PRIMARY KEY;')
     
     # Use db id
@@ -273,10 +274,11 @@ def cosmos_mosaic_from_tiles(assoc, filt='ir', clean=True):
     import astropy.io.fits as pyfits
     import astropy.table
     
-    olap_tiles = db.SQL(f"""SELECT DISTINCT(tile) 
+    olap_tiles = db.SQL(f"""SELECT DISTINCT(tile)
                         FROM cosmos_tiles t, exposure_files e
-                        WHERE e.assoc = '{assoc}' 
-                        AND polygon(e.footprint) && polygon(t.footprint)""")
+                        WHERE e.assoc = '{assoc}'
+                        AND polygon(e.footprint) && polygon(t.footprint)
+                        """)
     
     tx = np.array([int(t.split('.')[0]) for t in olap_tiles['tile']])
     ty = np.array([int(t.split('.')[1]) for t in olap_tiles['tile']])
@@ -308,13 +310,19 @@ def cosmos_mosaic_from_tiles(assoc, filt='ir', clean=True):
     h['NAXIS2'] *= ny
     
     img_shape = (h['NAXIS2'], h['NAXIS1'])
-    sci = np.zeros(img_shape), dtype=np.float32)
-    wht = np.zeros(img_shape), dtype=np.float32)
-    seg = np.zeros(img_shape), dtype=int)
+    sci = np.zeros(img_shape, dtype=np.float32)
+    wht = np.zeros(img_shape, dtype=np.float32)
+    seg = np.zeros(img_shape, dtype=int)
     
     for tile, txi, tyi in zip(olap_tiles['tile'], tx, ty):
         _file = f'cos-tile-{txi:02d}.{tyi:02d}-{filt}_dr*_sci.fits.gz'
-        file = glob.glob(_file)[0]
+        _files = glob.glob(_file)
+        if len(_files) == 0:
+            msg = f'*ERROR* {_file} not found'
+            utils.log_comment(utils.LOGFILE, msg, verbose=True)
+            continue
+            
+        file = _files[0]
         
         msg = f'Add tile {file} to {assoc} mosaic'
         utils.log_comment(utils.LOGFILE, msg, verbose=True)
@@ -410,60 +418,59 @@ def cosmos_mosaic_from_tiles(assoc, filt='ir', clean=True):
     if 0:
         os.system(f'aws s3 sync s3://grizli-v2/HST/Pipeline/{assoc}/Prep/ ./ --exclude "*" --include "*flt.fits" --include "*yml"')
     
-        grism_files = glob.glob('iehn*[a-p]_flt.fits')
-        grism_files.sort()
-    
-        grp = auto_script.grism_prep(field_root=assoc, 
-                                     gris_ref_filters={'G141':['ir']},
-                                     files=grism_files,
-                                     refine_mag_limits=[18,23], 
-                                     PREP_PATH='./')
-
-        if len(glob.glob(f'{assoc}*_grism*fits*')) == 0:
-            grism_files = glob.glob('*GrismFLT.fits')
-            grism_files.sort()
-
-            catalog = glob.glob(f'{assoc}-*.cat.fits')[0]
-            try:
-                seg_file = glob.glob(f'{assoc}-*_seg.fits')[0]
-            except:
-                seg_file = None
-
-            grp = multifit.GroupFLT(grism_files=grism_files, direct_files=[], 
-                                    ref_file=None, seg_file=seg_file, 
-                                    catalog=catalog, cpu_count=-1, sci_extn=1, 
-                                    pad=256)
-
-            # Make drizzle model images
-            grp.drizzle_grism_models(root=assoc, kernel='point', scale=0.15)
-
-            # Free grp object
-            del(grp)
-
-        #
-        pline = auto_script.DITHERED_PLINE.copy()
-        args_file = f'{assoc}_fit_args.npy'
-
-        if (not os.path.exists(args_file)):
-        
-            msg = '# generate_fit_params: ' + args_file
-            utils.log_comment(utils.LOGFILE, msg, verbose=True, show_date=True)
-
-            pline['pixscale'] = 0.1 #mosaic_args['wcs_params']['pixel_scale']
-            pline['pixfrac'] = 0.5  #mosaic_args['mosaic_pixfrac']
-            if pline['pixfrac'] > 0:
-                pline['kernel'] = 'square'
-            else:
-                pline['kernel'] = 'point'
-
-            min_sens = 1.e-4
-            min_mask = 1.e-4
-        
-            fit_trace_shift = True
-        
-            args = auto_script.generate_fit_params(field_root=assoc, prior=None, MW_EBV=0.0, pline=pline, fit_only_beams=True, run_fit=True, poly_order=7, fsps=True, min_sens=min_sens, min_mask=min_mask, sys_err=0.03, fcontam=0.2, zr=[0.05, 3.4], save_file=args_file, fit_trace_shift=fit_trace_shift, include_photometry=False, use_phot_obj=False)
-        
-            os.system(f'cp {args_file} fit_args.npy')
+        # grism_files = glob.glob('iehn*[a-p]_flt.fits')
+        # grism_files.sort()
+        #     
+        # grp = auto_script.grism_prep(field_root=assoc, 
+        #                              gris_ref_filters={'G141':['ir']},
+        #                              files=grism_files,
+        #                              refine_mag_limits=[18,23], 
+        #                              PREP_PATH='./')
+        # 
+        # if len(glob.glob(f'{assoc}*_grism*fits*')) == 0:
+        #     grism_files = glob.glob('*GrismFLT.fits')
+        #     grism_files.sort()
+        # 
+        #     catalog = glob.glob(f'{assoc}-*.cat.fits')[0]
+        #     try:
+        #         seg_file = glob.glob(f'{assoc}-*_seg.fits')[0]
+        #     except:
+        #         seg_file = None
+        # 
+        #     grp = multifit.GroupFLT(grism_files=grism_files, direct_files=[], 
+        #                             ref_file=None, seg_file=seg_file, 
+        #                             catalog=catalog, cpu_count=-1, sci_extn=1, 
+        #                             pad=256)
+        # 
+        #     # Make drizzle model images
+        #     grp.drizzle_grism_models(root=assoc, kernel='point', scale=0.15)
+        # 
+        #     # Free grp object
+        #     del(grp)
+        # 
+        # pline = auto_script.DITHERED_PLINE.copy()
+        # args_file = f'{assoc}_fit_args.npy'
+        # 
+        # if (not os.path.exists(args_file)):
+        # 
+        #     msg = '# generate_fit_params: ' + args_file
+        #     utils.log_comment(utils.LOGFILE, msg, verbose=True, show_date=True)
+        # 
+        #     pline['pixscale'] = 0.1 #mosaic_args['wcs_params']['pixel_scale']
+        #     pline['pixfrac'] = 0.5  #mosaic_args['mosaic_pixfrac']
+        #     if pline['pixfrac'] > 0:
+        #         pline['kernel'] = 'square'
+        #     else:
+        #         pline['kernel'] = 'point'
+        # 
+        #     min_sens = 1.e-4
+        #     min_mask = 1.e-4
+        # 
+        #     fit_trace_shift = True
+        # 
+        #     args = auto_script.generate_fit_params(field_root=assoc, prior=None, MW_EBV=0.0, pline=pline, fit_only_beams=True, run_fit=True, poly_order=7, fsps=True, min_sens=min_sens, min_mask=min_mask, sys_err=0.03, fcontam=0.2, zr=[0.05, 3.4], save_file=args_file, fit_trace_shift=fit_trace_shift, include_photometry=False, use_phot_obj=False)
+        # 
+        #     os.system(f'cp {args_file} fit_args.npy')
 
 
 def check_phot():
@@ -504,7 +511,7 @@ _radius, flux_auto, flux_aper_1, f105w_tot_corr, f125w_tot_corr, f140w_tot_corr,
     
     sub = ph[sel]['tile', 'id','ra','dec','hmag','ih']
 
-    sub['olap'] = [f'<a href="https://grizli-cutout.herokuapp.com/overlap?filters={iband},{hband}&coords={ra}%20{dec}&size=12&mode=files" /> {tile} {id} </a>' for tile, id, ra, dec in zip(sub['tile'], sub['id'], sub['ra'], sub['dec'])]
+    sub['olap'] = [f'<and href="https://grizli-cutout.herokuapp.com/overlap?filters={iband},{hband}&coords={ra}%20{dec}&size=12&mode=files" /> {tile} {id} </a>' for tile, id, ra, dec in zip(sub['tile'], sub['id'], sub['ra'], sub['dec'])]
     
     sub['img'] = [f'<a href="https://grizli-cutout.herokuapp.com/thumb?filters={iband},{hband}&coords={ra}%20{dec}&size=30" /> <img src="https://grizli-cutout.herokuapp.com/thumb?filters={iband},{hband}&coords={ra}%20{dec}&size=12" height=230px> </a>' for ra, dec in zip(sub['ra'], sub['dec'])]
 
@@ -512,6 +519,3 @@ _radius, flux_auto, flux_aper_1, f105w_tot_corr, f125w_tot_corr, f140w_tot_corr,
     sub['img'] = [f'<a href="https://grizli-cutout.herokuapp.com/thumb?coords={ra}%20{dec}&size=30" /> <img src="https://grizli-cutout.herokuapp.com/thumb?coords={ra}%20{dec}&size=12" height=230px> </a>' for ra, dec in zip(sub['ra'], sub['dec'])]
 
     sub['tile', 'olap', 'ra','dec','hmag','ih','img'].write_sortable_html('test.html', localhost=False, max_lines=5000)
-    
-    
-    

@@ -397,7 +397,7 @@ tile_mosaics=True, **kwargs):
             auto_script.multiband_catalog(field_root=root, **phot_kwargs)
     
     grp = auto_script.grism_prep(field_root=root, 
-                                 gris_ref_filters={'G141':[direct_filter]},
+                                 gris_ref_filters={'G141':[direct_filt]},
                                  files=grism_files,
                                  refine_mag_limits=[18,23])
     
