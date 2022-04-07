@@ -363,7 +363,7 @@ def cosmos_mosaic_from_tiles(assoc, filt='ir', clean=True):
                 utils.log_comment(utils.LOGFILE, msg, verbose=True)
                 os.remove(file)
 
-    # Catalog
+    #### Catalog
     cols = ['id','thresh', 'npix', 'tnpix',
             'xminpix as xmin', 'xmaxpix as xmax',
             'yminpix as ymin', 'ymaxpix as ymax', 
@@ -566,21 +566,28 @@ def compare_to_deeper():
     """
     Compare extractions in DASH and a pointed visit
     """
+    from grizli import multifit
+    import matplotlib.pyplot as plt
     
     deep_visit = 'j100028p0215_0417_dk1_id581181_wfc3ir_f160w-g141'
     dash_visit = 'j100028p0215_0651_ehn_cosmos-g141-169_wfc3ir_g141'
     
     args0 = np.load(f'{deep_visit}_fit_args.npy', allow_pickle=True)[0]
     args1 = np.load(f'{dash_visit}_fit_args.npy', allow_pickle=True)[0]
+    args0['min_mask'] = 0.000
+    args1['min_mask'] = 0.000
+
+    args0['min_sens'] = 0.000
+    args1['min_sens'] = 0.000
     
     id = 13046
-    id = 115672
+    #id = 115672
     
     mb0 = multifit.MultiBeam(f'{deep_visit}_{id:05d}.beams.fits', **args0)
     mb1 = multifit.MultiBeam(f'{dash_visit}_{id:05d}.beams.fits', **args1)
     
-    s0 = mb0.oned_spectrum(tfit=tfit0)['G141']
-    s1 = mb1.oned_spectrum(tfit=tfit1)['G141']
+    s0 = mb0.oned_spectrum()['G141']
+    s1 = mb1.oned_spectrum()['G141']
     
     plt.plot(s0['wave'], s0['flux'])
     plt.plot(s1['wave'], s1['flux'])
