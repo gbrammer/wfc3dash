@@ -306,6 +306,9 @@ def cosmos_mosaic_from_tiles(assoc, filt='ir', clean=True):
         
         h[c] = wcs[c][0]
     
+    xnpix = h['NAXIS1']
+    ynpix = h['NAXIS2']
+    
     h['NAXIS1'] *= nx
     h['NAXIS2'] *= ny
     
@@ -328,8 +331,8 @@ def cosmos_mosaic_from_tiles(assoc, filt='ir', clean=True):
         utils.log_comment(utils.LOGFILE, msg, verbose=True)
 
         im = pyfits.open(file)
-        slx = slice((txi-xm)*img_shape[1], (txi-xm+1)*img_shape[1])
-        sly = slice((tyi-ym)*img_shape[0], (tyi-ym+1)*img_shape[0])      
+        slx = slice((txi-xm)*xnpix, (txi-xm+1)*xnpix)
+        sly = slice((tyi-ym)*ynpix, (tyi-ym+1)*ynpix)      
         
         for k in im[0].header:
             if k not in h:
@@ -472,6 +475,40 @@ def cosmos_mosaic_from_tiles(assoc, filt='ir', clean=True):
         # 
         #     os.system(f'cp {args_file} fit_args.npy')
 
+
+def redo_model_from_mosaic(assoc, **kwargs):
+    """
+    """
+    from grizli import utils
+    
+    import wfc3dash.grism.grism
+    import wfc3dash.grism.tiles
+    from grizli.aws import db, visit_processor
+    
+    if 0:
+        assoc = 'j100028p0215_0417_dk1_id581181_wfc3ir_f160w-g141'
+    
+    os.chdir(wfc3dash.grism.grism.HOME_PATH)
+    
+    visit_processor.update_assoc_status(assoc, status=21)
+    
+    os.system(f'aws s3 rm --recursive s3://grizli-v2/HST/Pipeline/{assoc} --exclude "*" --include "Extractions/*" --include "Prep/*GrismFLT*"')
+    
+    os.system(f"""aws s3 sync s3://grizli-v2/HST/Pipeline/{assoc}/ ./{assoc} --exclude "*" --include "Prep/*flt.fits" --include "Prep/{assoc}-ir*"
+    """)
+    
+    utils.LOGFILE = os.path.join(wfc3dash.grism.grism.HOME_PATH, assoc, 
+                                 assoc + '_grism.log.txt')
+                                 
+    if not os.path.exists(f'{assoc}/Extractions'):
+        os.mkdir(f'{assoc}/Extractions')
+    
+    os.chdir(f'{assoc}/Prep')
+    
+    wfc3dash.grism.grism.compute_grism_contamination(assoc, **kwargs)
+    
+    
+    
 
 def check_phot():
     """
