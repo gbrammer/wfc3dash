@@ -89,7 +89,6 @@ def add_ytrace_offset(self, yoffset):
     self.sensitivity = ysens
 
 
-#
 def get_beam_kernel(file):
     """
     Kernel for source identification
