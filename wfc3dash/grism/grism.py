@@ -132,12 +132,22 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
     for v in visits:
         if v['product'] not in failed:
             ok_visits.append(v)
+            
     visits = ok_visits
     
-    # First sync
+    #### Visit log
+    files = []
+    for v in visits:
+        files.extend([os.path.join('./Prep/', f) for f in v['files']])
+    
+    info = utils.get_flt_info(files)
+    
+    auto_script.write_visit_info(visits, [], info, root=assoc, path='./')
+    
+    #### First sync
     visit_processor.update_assoc_status(assoc, status=2)
     
-    # Add alignment tables
+    #### Add alignment tables
     files = glob.glob('*log.txt')
     files.sort()
     
@@ -147,7 +157,6 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
         
     logs = []
     for file in files:
-        #ltxt = utils.read_catalog(file, skiprows=1)
         with open(file) as fp:
             lt = utils.read_catalog(''.join(fp.readlines()[1:]))
             logs.append(lt)
@@ -156,6 +165,7 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
     lt['assoc'] = assoc
     lt['modtime'] = astropy.time.Time.now().mjd
     
+    ## to database
     db.execute(f"DELETE FROM dash_grism_alignment WHERE assoc = '{assoc}'")
     
     db.send_to_database('dash_grism_alignment', lt, if_exists='append')
@@ -163,23 +173,34 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
     for visit in visits:
         visit_processor.exposure_info_from_visit(visit, assoc=assoc)
     
-    os.system(f"""aws s3 sync ./ s3://grizli-v2/HST/Pipeline/{assoc}/Prep/ --exclude "*" --include "iehn*png" --include "iehn*txt" """)
+    ## files to s3
+    os.system(f"""aws s3 sync ./ s3://grizli-v2/HST/Pipeline/{assoc}/Prep/ \ 
+                              --exclude "*" \
+                              --include "iehn*png" \
+                              --include "iehn*txt" \
+                              --include "*yaml"
+                              """)
     
-    # Model, etc.    
-    finish_group(assoc, **kwargs)
+    #### Contamination model, etc.    
+    compute_grism_contamination(assoc, **kwargs)
     
-    # Sync
+    #### Sync results
+    if sync:
+        sync_products(assoc)
+        
+    visit_processor.update_assoc_status(assoc, status=3)
+    
+    if clean:
+        os.chdir(HOME_PATH)
+        os.system(f'rm -rf {assoc}*')        
+
+
+def sync_products(assoc):
+    """
+    Sync results to S3
+    """
     os.chdir(os.path.join(HOME_PATH, assoc))
-    
-    files = []
-    for v in visits:
-        files.extend([os.path.join('./Prep/', f) for f in v['files']])
-    
-    info = utils.get_flt_info(files)
-    
-    #np.save(f'Prep/{assoc}_visits.npy', [visits, [], None])
-    auto_script.write_visit_info(visits, [], info, root=assoc, path='./Prep')
-    
+        
     os.system(f'rm Prep/*bkg.fits')
     
     drz_files = glob.glob('Prep/*_dr*fits')
@@ -192,13 +213,14 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
         print(cmd)
         os.system(cmd)
         
-    os.system(f"""aws s3 sync ./ s3://grizli-v2/HST/Pipeline/{assoc}/ --exclude "*" --include "Prep/*flt.fits" --include "Prep/*txt" --include "Extractions/*" --include "Prep/{assoc}*" --include "Prep/iehn*[nx][gt]" """)
-
-    visit_processor.update_assoc_status(assoc, status=3)
-    
-    if clean:
-        os.chdir(HOME_PATH)
-        os.system(f'rm -rf {assoc}*')        
+    os.system(f"""aws s3 sync ./ s3://grizli-v2/HST/Pipeline/{assoc}/ \
+                              --exclude "*" \
+                              --include "Prep/*flt.fits" \
+                              --include "Prep/*txt" \
+                              --include "Extractions/*" \
+                              --include "Prep/{assoc}*" \
+                              --include "Prep/iehn*[nx][gt]"
+                              """)
 
 
 def align_visit(visit, flag_crs=True, driz_cr_kwargs={'driz_cr_snr_grow':3}, **kwargs):
@@ -316,42 +338,70 @@ def align_visit(visit, flag_crs=True, driz_cr_kwargs={'driz_cr_snr_grow':3}, **k
                               **driz_cr_kwargs)
 
 
-def finish_group(assoc, filters=['F814W','F105W','F140W','F125W','F160W'], phot_kwargs={}, **kwargs):
+def compute_grism_contamination(assoc, filters=['F814W','F105W','F140W','F125W','F160W'], grism_files=None, phot_kwargs={}, direct_filt='ir', 
+tile_mosaics=True, **kwargs):
     """
-    Things to do as a group
+    Extra steps for grism processing:
+    
+    1) Imaging mosaic, catalog, segmentation image
+    
+    2) Contamination model
+    
+    3) Drizzled model images
+    
     """
     import golfir.catalog
+    from . import tiles as cosmos_tiles
     
     global PATHS
     
+    root = assoc    
+    
     os.chdir(os.path.join(HOME_PATH, assoc, 'Prep'))
     
-    grism_files = glob.glob('iehn*flt.fits')
-    grism_files.sort()
+    if grism_files is None:
+        files = glob.glob('*flt.fits')
+        files.sort()
     
-    _h, ir_wcs = utils.make_maximal_wcs(grism_files, pixel_scale=0.1, 
-                                        get_hdu=False, pad=128)
+        # Remove q files from DASH-grism
+        for j in range(len(files))[::-1]:
+            _file = files[j]
+            if _file.startswith('iehn') & ('q_flt' in _file):
+                _ = files.pop(j)
+            
+        info = utils.get_flt_info(files)
+        is_grism = np.array([f.startswith('G') for f in info['FILTER']])
+        grism_files = info['FILE'][is_grism].tolist()
+    
+    if not os.path.exists(f'{root}-{direct_filt}_drz_sci.fits'):
+        if tile_mosaics:
+            #### Build mosaic from pre-drizzled tiles and catalog
+            cosmos_tiles.cosmos_mosaic_from_tiles(assoc, filt=direct_filt)
+        else:
+            ### Drizzle reference mosaic from imaging exposures
+            _h, ir_wcs = utils.make_maximal_wcs(grism_files, pixel_scale=0.1, 
+                                                get_hdu=False, pad=128)
                                         
-    #### Reference mosaic
-    root = assoc    
-    visit_processor.cutout_mosaic(rootname=root, 
-                              skip_existing=False,
-                              ir_wcs=ir_wcs,
-                              filters=filters, 
-                              kernel='square', s3output=None, 
-                              gzip_output=False, clean_flt=True)
-    
-    golfir.catalog.make_charge_detection(root, ext='ir')
-    
-    auto_script.multiband_catalog(field_root=root, **phot_kwargs)
+            #### Reference mosaic
+            visit_processor.cutout_mosaic(rootname=root, 
+                                          skip_existing=False,
+                                          ir_wcs=ir_wcs,
+                                          filters=filters, 
+                                          kernel='square', s3output=None, 
+                                          gzip_output=False, clean_flt=True)
+            
+            #### Combined detection image
+            golfir.catalog.make_charge_detection(root, ext='ir')
+            
+            #### Photometric catalog
+            auto_script.multiband_catalog(field_root=root, **phot_kwargs)
     
     grp = auto_script.grism_prep(field_root=root, 
-                                 gris_ref_filters={'G141':['ir']},
+                                 gris_ref_filters={'G141':[direct_filter]},
                                  files=grism_files,
                                  refine_mag_limits=[18,23])
     
-    # Drizzled grp objects
-    # All files
+    #### Drizzled grp objects
     if len(glob.glob(f'{root}*_grism*fits*')) == 0:
         grism_files = glob.glob('*GrismFLT.fits')
         grism_files.sort()
@@ -373,7 +423,7 @@ def finish_group(assoc, filters=['F814W','F105W','F140W','F125W','F160W'], phot_
         # Free grp object
         del(grp)
     
-    # Params
+    #### Fit params
     pline = auto_script.DITHERED_PLINE.copy()
     args_file = f'{root}_fit_args.npy'
 
