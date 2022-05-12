@@ -169,7 +169,7 @@ def split_tiles(root='abell2744-080-08.08', ref_tile=(8,8), filters=['visr','f12
                 slx = slice((i*256), (i+1)*256)
                 sly = slice((j*256), (j+1)*256)
                 
-                tile_file = f'Tiles/{base}/{zoom}/{yi}/{xi}.png'
+                tile_file = f'{root}-tiles/{base}/{zoom}/{yi}/{xi}.png'
                 if verbose > 1:
                     print(f'  {i} {j} {tile_file}')
                 
@@ -416,7 +416,7 @@ def process_tile(field='cos', tile='01.01', filters=TILE_FILTERS, fetch_existing
                          make_ir_filters=True, 
                          make_opt_filters=True)
     
-    os.system(f'aws s3 sync ./Tiles/ ' + 
+    os.system(f'aws s3 sync ./{root}-tiles/ ' + 
               f' s3://grizli-v2/ClusterTiles/Map/{field}/ ' + 
                '--acl public-read --quiet')
                       
@@ -437,14 +437,16 @@ def process_tile(field='cos', tile='01.01', filters=TILE_FILTERS, fetch_existing
     db.execute(f"update combined_tiles set status=2 where tile = '{tile}' AND field = '{field}'")
 
     if cleanup:
+        print(f'rm -rf {root}-tiles')
+        os.system(f'rm -rf {root}-tiles')
+        
         files = glob.glob(f'{root}*')
         files.sort()
         for file in files:
             print(f'rm {file}')
             os.remove(file)
         
-        print('rm -rf ./Tiles')
-        os.system('rm -rf ./Tiles')
+
 
 
 def get_random_tile():
