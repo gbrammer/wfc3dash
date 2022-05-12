@@ -24,6 +24,8 @@ def make_cosmos_tiles():
     
     np.set_printoptions(precision=6)
     
+    name='cos'
+    
     tile_npix = 4096
     pscale = 0.1
     
@@ -36,13 +38,19 @@ def make_cosmos_tiles():
     rsize = 45
     pscale = 0.080
     tile_npix = 2048+256
-
+    
+    if 0:
+        ra, dec, rsize = 34.40869, -5.16299, 30
+        name = 'uds'
+        pscale = 0.08
+        tile_npix = 2048+256
+        
+        
     tile_arcmin = tile_npix*pscale/60
     overlap=tile_arcmin/9
     
     print('Tile size, arcmin = ', tile_arcmin)
     
-    name='cos'
     tiles = field_tiles.define_tiles(ra=ra, dec=dec, 
                                            size=(rsize*2, rsize*2), 
                                            tile_size=tile_arcmin, 
@@ -84,8 +92,10 @@ def make_cosmos_tiles():
             row.append(wcsh[k])
         
         fp = sr.xy[0].__str__().replace('\n', ',').replace('   ', ',')
+        fp = fp.replace(' -',',-')
         fp = fp.replace(' ', '').replace('[','(')
         fp = fp.replace(']', ')').replace(',,',',')
+
         row.append(fp)     
         
         rows.append(row)
@@ -101,6 +111,9 @@ def make_cosmos_tiles():
     
     cos_tile['field'] = name
     
+    if 0:
+        db.send_to_database('combined_tiles', cos_tile, if_exists='append')
+        
     #db.send_to_database('cosmos_tiles', cos_tile, if_exists='replace')
     db.send_to_database('combined_tiles', cos_tile, if_exists='replace')
     
@@ -416,7 +429,8 @@ def process_tile(field='cos', tile='01.01', filters=TILE_FILTERS, fetch_existing
                    header=seg[0].header, overwrite=True)
     
     ### Make subtiles
-    ref_tiles = {'cos': (16,16)}
+    ref_tiles = {'cos': (16,16), 
+                 'uds': (11, 10)}
     
     if field in ref_tiles:
         ref_tile = ref_tiles[field]
