@@ -329,6 +329,18 @@ def process_tile(field='cos', tile='01.01', filters=TILE_FILTERS, fetch_existing
     
     phot = auto_script.multiband_catalog(field_root=root) #, **phot_kwargs)
     
+    if len(phot) == 0:
+        # Empty catalog
+        db.execute(f"update combined_tiles set status=10 where tile = '{tile}' AND field = '{field}'")
+        
+        if cleanup:
+
+            files = glob.glob(f'{root}*')
+            files.sort()
+            for file in files:
+                print(f'rm {file}')
+                os.remove(file)
+
     for i in [4,5,6]:
         for c in phot.colnames:
             if c.endswith(f'{i}'):
