@@ -219,7 +219,16 @@ def make_all_tile_images(root, force=False, ref_tile=(8,8), cleanup=True, zoom_l
                     force=force, rgb_scl=[1., 1.2, 1.4], rgb_min=-0.018)
 
         plt.close('all')
+        
+    if root.startswith('cos'):
+        if len(glob.glob(f'{root}*.vi.png')) == 0:
+            split_tiles(root, ref_tile=ref_tile, 
+                        filters=['f814w','f160w'], zoom_levels=zoom_levels,
+                        optical=False, suffix='.vi', xsize=6, scl=0.8,
+                        force=force, rgb_scl=[1, 1, 1], rgb_min=-0.018)
 
+            plt.close('all')
+        
     # IR
     if make_ir_filters:
         files = glob.glob(f'{root}-f[01]*sci.fits*')
@@ -300,9 +309,9 @@ def process_tile(field='cos', tile='01.01', filters=TILE_FILTERS, fetch_existing
                           --include "{root}*_dr?*fits.gz"
                           """.replace('\n', ' '))
         
-        files = glob.glob('{root}*gz')
+        files = glob.glob(f'{root}*gz')
         for file in files:
-            os.system('gunzip --force {file}')
+            os.system(f'gunzip --force {file}')
             
     visit_processor.cutout_mosaic(rootname=root, 
                               skip_existing=True,
