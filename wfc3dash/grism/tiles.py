@@ -340,7 +340,9 @@ def process_tile(field='cos', tile='01.01', filters=TILE_FILTERS, fetch_existing
             for file in files:
                 print(f'rm {file}')
                 os.remove(file)
-
+        
+        return False
+        
     for i in [4,5,6]:
         for c in phot.colnames:
             if c.endswith(f'{i}'):
