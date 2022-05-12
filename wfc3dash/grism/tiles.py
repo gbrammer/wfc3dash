@@ -5,8 +5,13 @@ import os
 import glob
 import numpy as np
 
+import matplotlib.pyplot as plt
+from skimage.io import imsave
+
 from grizli import utils
 from grizli.aws import db
+from grizli.pipeline import auto_script
+
 
 def make_cosmos_tiles():
     """
@@ -21,17 +26,27 @@ def make_cosmos_tiles():
     
     tile_npix = 4096
     pscale = 0.1
-    tile_arcmin = tile_npix*pscale/60
-    print('Tile size, arcmin = ', tile_arcmin)
     
     ra, dec = 150.1, 2.29
     rsize = 48
+    overlap = 0
+    
+    # New tiles with overlaps
+    ra, dec = 150.125, 2.2
+    rsize = 45
+    pscale = 0.080
+    tile_npix = 2048+256
+
+    tile_arcmin = tile_npix*pscale/60
+    overlap=tile_arcmin/9
+    
+    print('Tile size, arcmin = ', tile_arcmin)
     
     name='cos'
     tiles = field_tiles.define_tiles(ra=ra, dec=dec, 
                                            size=(rsize*2, rsize*2), 
                                            tile_size=tile_arcmin, 
-                                           overlap=0, field=name, 
+                                           overlap=overlap, field=name, 
                                            pixscale=pscale, theta=0)
     
     filt = 'G141'
@@ -49,8 +64,6 @@ def make_cosmos_tiles():
     fig.savefig('/tmp/map.png')
     
     ax = fig.axes[0]
-    rows = []
-    
     for t in tiles:
         wcs = tiles[t]
         sr = utils.SRegion(wcs.calc_footprint())
@@ -59,7 +72,12 @@ def make_cosmos_tiles():
         
         ax.text(*sr.centroid[0], t, ha='center', va='center', 
                 transform=ax.get_transform('world'), fontsize=7)
-                
+    
+    rows = []
+    for t in tiles:
+        wcs = tiles[t]
+        sr = utils.SRegion(wcs.calc_footprint())
+                    
         wcsh = utils.to_header(wcs)
         row = [t]
         for k in wcsh:
@@ -81,7 +99,10 @@ def make_cosmos_tiles():
     cos_tile = utils.GTable(rows=rows, names=names)
     cos_tile['status'] = 0
     
-    db.send_to_database('cosmos_tiles', cos_tile, if_exists='replace')
+    cos_tile['field'] = name
+    
+    #db.send_to_database('cosmos_tiles', cos_tile, if_exists='replace')
+    db.send_to_database('combined_tiles', cos_tile, if_exists='replace')
     
     # To do: fix footprint in cosmos_tiles
     # ...
@@ -91,12 +112,160 @@ def make_cosmos_tiles():
     #     db.SQL("select distinct(tile) from cosmos_tiles_tmp t, exposure_files e where e.assoc = 'j100040p0216_2190_ehn_cosmos-g141-156_wfc3ir_g141' AND polygon(e.footprint) && polygon(t.footprint)")
     #     
 
+def split_tiles(root='abell2744-080-08.08', ref_tile=(8,8), filters=['visr','f125w','h'], optical=False, suffix='.rgb', xsize=6, zoom_levels=[4,3,2,1], force=False, scl=1, invert=False, verbose=True, rgb_scl=[1,1,1], rgb_min=-0.01):
+    """
+    Split image into 256 pixel tiles for map display
+    """
+    nx = (2048+256)
+    dpi = int(nx/xsize)
+    
+    if os.path.exists(f'{root}{suffix}.png') & (~force):
+        return True
+    
+    try:
+        _ = auto_script.field_rgb(root=root,
+                                  xsize=xsize, filters=filters, 
+                                  full_dimensions=2**optical, HOME_PATH=None, 
+                                  add_labels=False,
+                                  gzext='*', suffix=suffix, 
+                                  output_format='png',
+                                  scl=scl, invert=invert, 
+                                  rgb_scl=rgb_scl, rgb_min=rgb_min)
+    except IndexError:
+        return False
+    
+    fig = _[-1]
+    
+    base = '_'.join(root.split('-')[:-1]).replace('+','_') + '_' + suffix[1:]
+    
+    tx, ty = np.cast[int](root.split('-')[-1].split('.'))
 
-TILE_FILTERS = ['F350LP', 'F435W', 'F475W', 'F606W', 'F775W', 
+    for iz, zoom in enumerate(zoom_levels):
+        if iz > 0:
+            zoom_img = f'{root}{suffix}.{2**iz:d}.png'
+            fig.savefig(zoom_img, dpi=dpi/2**iz)
+            img = plt.imread(zoom_img)
+        else:
+            img = plt.imread(f'{root}{suffix}.png')
+        
+        if verbose:
+            print(f'zoom: {zoom} {img.shape}')
+        
+        img = img[::-1,:,:]
+        
+        ntile = int(2048/2**(4-zoom)/256)
+        left = (tx - ref_tile[0])*ntile
+        bot = -(ty - ref_tile[1])*ntile+2*ntile
+        # print(zoom, ntile, left, bot)
+
+        #axes[iz].set_xlim(-ntile*0.1, ntile*(1.1)-1)
+        #axes[iz].set_ylim(*axes[iz].get_xlim())
+
+        for i in range(ntile):
+            xi = left + i
+            for j in range(ntile):
+                yi = bot - j - 1
+                
+                slx = slice((i*256), (i+1)*256)
+                sly = slice((j*256), (j+1)*256)
+                
+                tile_file = f'Tiles/{base}/{zoom}/{yi}/{xi}.png'
+                if verbose > 1:
+                    print(f'  {i} {j} {tile_file}')
+                
+                dirs = tile_file.split('/')
+                for di in range(1,5):
+                    dpath = '/'.join(dirs[:di])
+                    #print(dpath)
+                    if not os.path.exists(dpath):
+                        os.mkdir(dpath)
+                                     
+                imsave(tile_file, img[sly, slx, :][::-1,:,:],
+                       plugin='pil', format_str='png')
+
+
+def make_all_tile_images(root, force=False, ref_tile=(8,8), cleanup=True, zoom_levels=[4,3,2,1], brgb_filts=['visr','visb','uv'], rgb_filts=['visr','j','h'], blue_is_opt=True, make_opt_filters=True, make_ir_filters=True):
+    
+    #root = f'{field}-080-08.08'
+
+    files = glob.glob(f'{root}-[hvu]*')
+    files += glob.glob(f'{root}*.rgb.png')
+
+    if len(files) == 0:
+        auto_script.make_filter_combinations(root, 
+                          filter_combinations={'h':['F140W','F160W'], 
+                                               'j':['F105W','F110W','F125W'],
+                                            'visr':['F850LP','F814W','F775W'],
+                                     'visb':['F606W','F555W', 'F606WU'][:-1],
+                                'uv':['F438WU','F435W','F435WU', 'F475W']}, 
+                                            weight_fnu=False)
+
+    if 'j' in rgb_filts:
+        rgb_scl = [1.1, 0.8, 1]
+    else:
+        rgb_scl = [1,1,1]
+        
+    split_tiles(root, ref_tile=ref_tile, 
+                filters=rgb_filts, zoom_levels=zoom_levels,
+                optical=False, suffix='.rgb', xsize=6, scl=1,
+                force=force, rgb_scl=rgb_scl)
+
+    plt.close('all')
+    
+    if len(glob.glob(f'{root}*.brgb.png')) == 0:
+        split_tiles(root, ref_tile=ref_tile, 
+                    filters=brgb_filts, zoom_levels=zoom_levels,
+                    optical=blue_is_opt, suffix='.brgb', xsize=6, scl=2,
+                    force=force, rgb_scl=[1., 1.2, 1.4], rgb_min=-0.018)
+
+        plt.close('all')
+
+    # IR
+    if make_ir_filters:
+        files = glob.glob(f'{root}-f[01]*sci.fits*')
+        files.sort()
+        filts = [file.split(f'{root}-')[1].split('_')[0] for file in files]
+        for filt in filts:
+            if os.path.exists(f'{root}.{filt}.png'):
+                continue
+
+            split_tiles(root, ref_tile=ref_tile, 
+                    filters=[filt], zoom_levels=zoom_levels,
+                    optical=False, suffix=f'.{filt}', xsize=6, 
+                    force=force, scl=2, invert=True)
+
+            plt.close('all')
+    
+    if make_opt_filters:
+        # Optical, 2X pix
+        files = glob.glob(f'{root}-f[2-8]*sci.fits*')
+        files.sort()
+        filts = [file.split(f'{root}-')[1].split('_')[0] for file in files]
+        for filt in filts:
+            if os.path.exists(f'{root}.{filt}.png'):
+                continue
+
+            split_tiles(root, ref_tile=ref_tile, 
+                filters=[filt], zoom_levels=zoom_levels,
+                optical=True, suffix=f'.{filt}', xsize=6, 
+                force=force, scl=2, invert=True)
+
+            plt.close('all')
+    
+    if cleanup:
+        files = glob.glob(f'{root}-[vhuj]*fits*')
+        files.sort()
+        for file in files:
+            print(f'rm {file}')
+            os.remove(file)
+
+
+TILE_FILTERS = ['F336W', 'F350LP', 'F390W', 'F435W', 'F438W', 'F475W',
+                'F555W', 'F606W', 'F625W', 'F775W', 
                 'F814W', 'F850LP', 
-                'F098M', 'F105W', 'F110W', 'F125W', 'F140W', 'F160W']
+                'F098M', 'F105W', 'F110W', 'F125W', 'F140W', 'F160W'][1:]
 
-def process_tile(tile='01.01', filters=TILE_FILTERS):
+def process_tile(field='cos', tile='01.01', filters=TILE_FILTERS, fetch_existing=True, cleanup=True):
     """
     """
     import numpy as np
@@ -110,9 +279,10 @@ def process_tile(tile='01.01', filters=TILE_FILTERS):
     
     utils.LOGFILE = 'mosaic.log'
     
-    db.execute(f"update cosmos_tiles set status=1 where tile = '{tile}'")
+    db.execute(f"update combined_tiles set status=1 where tile = '{tile}' and field='{field}'")
     
-    row = db.SQL(f"select * from cosmos_tiles where tile = '{tile}'")
+    row = db.SQL(f"select * from combined_tiles where tile = '{tile}' and field='{field}'")
+    
     h = pyfits.Header()
     for k in row.colnames:
         if k in ['footprint']:
@@ -122,10 +292,20 @@ def process_tile(tile='01.01', filters=TILE_FILTERS):
         
     ir_wcs = pywcs.WCS(h)
     
-    root = f'cos-tile-{tile}'
+    root = f'{field}-080-{tile}'
     
+    if fetch_existing:
+        os.system(f"""aws s3 sync s3://grizli-v2/ClusterTiles/{field}/ ./
+                          --exclude "*"
+                          --include "{root}*_dr?*fits.gz"
+                          """.replace('\n', ' '))
+        
+        files = glob.glob('{root}*gz')
+        for file in files:
+            os.system('gunzip --force {file}')
+            
     visit_processor.cutout_mosaic(rootname=root, 
-                              skip_existing=False,
+                              skip_existing=True,
                               ir_wcs=ir_wcs,
                               filters=filters, 
                               kernel='square', s3output=None, 
@@ -133,7 +313,7 @@ def process_tile(tile='01.01', filters=TILE_FILTERS):
     
     files = glob.glob(f'{root}*dr*fits')
     if len(files) == 0:
-        db.execute(f"update cosmos_tiles set status=4 where tile = '{tile}'")
+        db.execute(f"update combined_tiles set status=4 where tile = '{tile}'")
         return True
         
     golfir.catalog.make_charge_detection(root, ext='ir')
@@ -155,6 +335,7 @@ def process_tile(tile='01.01', filters=TILE_FILTERS):
             phot[c] = phot[c].astype(np.int32)
               
     phot['tile'] = tile
+    phot['field'] = field
     
     if 'id' in phot.colnames:
         phot.remove_column('id')
@@ -163,38 +344,43 @@ def process_tile(tile='01.01', filters=TILE_FILTERS):
         if c in phot.colnames:
             phot.rename_column(c, c+'pix')
     
-    db.execute(f"DELETE from cosmos_tile_phot WHERE tile='{tile}'")
+    if 0:
+        db.execute('CREATE TABLE combined_tile_phot AS SELECT * FROM cosmos_tile_phot limit 0')
+        db.execute('ALTER TABLE combined_tile_phot DROP COLUMN id;')
+        db.execute('ALTER TABLE combined_tile_phot ADD COLUMN id SERIAL PRIMARY KEY;')
+        
+    db.execute(f"DELETE from combined_tile_phot WHERE tile='{tile}' and field='{field}'")
     
     seg = pyfits.open(f'{root}-ir_seg.fits')
     
     ### IDs on edge
-    edge = np.unique(seg[0].data[0,:])
-    edge = np.append(edge, np.unique(seg[0].data[-1,:]))
-    edge = np.append(edge, np.unique(seg[0].data[:,0]))
-    edge = np.append(edge, np.unique(seg[0].data[:,-1]))
+    edge = np.unique(seg[0].data[16:19,:])
+    edge = np.append(edge, np.unique(seg[0].data[-19:-16,:]))
+    edge = np.append(edge, np.unique(seg[0].data[:, 16:19]))
+    edge = np.append(edge, np.unique(seg[0].data[:, -19:-16]))
     edge = np.unique(edge)
-    phot['edge'] = np.in1d(phot['number'], edge)*0
+    phot['edge'] = np.in1d(phot['number'], edge)*1
     
     ### Add missing columns
-    cols = db.SQL('select * from cosmos_tile_phot limit 2').colnames
+    cols = db.SQL('select * from combined_tile_phot limit 2').colnames
     for c in phot.colnames:
         if c not in cols:
-            print('Add column {0} to `cosmos_tile_phot` table'.format(c))
+            print('Add column {0} to `combined_tile_phot` table'.format(c))
             if phot[c].dtype in [np.float64, np.float32]:
-                SQL = "ALTER TABLE cosmos_tile_phot ADD COLUMN {0} real;".format(c)
+                SQL = "ALTER TABLE combined_tile_phot ADD COLUMN {0} real;".format(c)
             else:
-                SQL = "ALTER TABLE cosmos_tile_phot ADD COLUMN {0} int;".format(c)
+                SQL = "ALTER TABLE combined_tile_phot ADD COLUMN {0} int;".format(c)
                 
             db.execute(SQL)
             
-    db.send_to_database('cosmos_tile_phot', phot, if_exists='append')
+    db.send_to_database('combined_tile_phot', phot, if_exists='append')
     
     if 'id' not in cols:
         # Add unique id index column
-        db.execute('ALTER TABLE cosmos_tile_phot ADD COLUMN id SERIAL PRIMARY KEY;')
+        db.execute('ALTER TABLE combined_tile_phot ADD COLUMN id SERIAL PRIMARY KEY;')
     
     # Use db id
-    ids = db.SQL(f"SELECT number, id, ra, dec, tile from cosmos_tile_phot WHERE tile='{tile}'")
+    ids = db.SQL(f"SELECT number, id, ra, dec, tile from combined_tile_phot WHERE tile='{tile}' AND field='{field}'")
     idx, dr = ids.match_to_catalog_sky(phot)
         
     phot['id'] = phot['number']
@@ -206,6 +392,26 @@ def process_tile(tile='01.01', filters=TILE_FILTERS):
     pyfits.writeto(f'{root}-ir_seg.fits', data=seg[0].data, 
                    header=seg[0].header, overwrite=True)
     
+    ### Make subtiles
+    ref_tiles = {'cos': (16,16)}
+    
+    if field in ref_tiles:
+        ref_tile = ref_tiles[field]
+    else:
+        ref_tile = (9, 9)
+        
+    make_all_tile_images(root, force=False, ref_tile=ref_tile,
+                         rgb_filts=['h','j','visr'],
+                         brgb_filts=['visr','visb','uv'],
+                         blue_is_opt=(field not in ['j013804m2156']), 
+                         make_ir_filters=True, 
+                         make_opt_filters=True)
+    
+    os.system(f'aws s3 sync ./Tiles/ ' + 
+              f' s3://grizli-v2/ClusterTiles/Map/{field}/ ' + 
+               '--acl public-read --quiet')
+                      
+    ### Gzip products
     drz_files = glob.glob(f'{root}-*_dr*fits')
     drz_files += glob.glob(f'{root}*seg.fits')
     drz_files.sort()
@@ -215,9 +421,21 @@ def process_tile(tile='01.01', filters=TILE_FILTERS):
         print(cmd)
         os.system(cmd)
         
-    os.system(f"""aws s3 sync ./ s3://grizli-v2/HST/Cosmos/Tiles/ --exclude "*" --include "{root}*gz" --include "*wcs.csv" --include "*fp.png" """)
+    os.system(f'aws s3 sync ./ s3://grizli-v2/ClusterTiles/{field}/' + 
+              f' --exclude "*" --include "{root}*gz" --include "*wcs.csv"' + 
+              f' --include "*fp.png"')
     
-    db.execute(f"update cosmos_tiles set status=2 where tile = '{tile}'")
+    db.execute(f"update combined_tiles set status=2 where tile = '{tile}' AND field = '{field}'")
+
+    if cleanup:
+        files = glob.glob(f'{root}*')
+        files.sort()
+        for file in files:
+            print(f'rm {file}')
+            os.remove(file)
+        
+        print('rm -rf ./Tiles')
+        os.system('rm -rf ./Tiles')
 
 
 def get_random_tile():
@@ -226,15 +444,15 @@ def get_random_tile():
     """
     from grizli.aws import db
     
-    all_tiles = db.SQL(f"""SELECT DISTINCT(tile) 
-                           FROM cosmos_tiles
+    all_tiles = db.SQL(f"""SELECT tile, field 
+                           FROM combined_tiles
                            WHERE status=0""")
     
     if len(all_tiles) == 0:
-        return None
+        return None, None
     
-    random_tile = all_tiles[np.random.randint(0, len(all_tiles))][0]
-    return random_tile
+    tile, field = all_tiles[np.random.randint(0, len(all_tiles))]
+    return tile, field
 
 
 def run_one():
@@ -245,11 +463,11 @@ def run_one():
     import time
     from grizli.aws import db
 
-    ntile = db.SQL("""SELECT count(distinct(tile))
-                       FROM cosmos_tiles
+    ntile = db.SQL("""SELECT count(status)
+                       FROM combined_tiles
                        WHERE status = 0""")['count'][0] 
     
-    tile = get_random_tile()
+    tile, field = get_random_tile()
     if tile is None:
         with open('/GrizliImaging/tile_finished.txt','w') as fp:
             fp.write(time.ctime() + '\n')
@@ -262,10 +480,10 @@ def run_one():
             fp.write(f'{time.ctime()} {tile}\n')
         
         #process_visit(tile, clean=clean, sync=sync)
-        process_tile(tile=tile)
+        process_tile(tile=tile, field=field)
 
 
-def cosmos_mosaic_from_tiles(assoc, filt='ir', clean=True):
+def create_mosaic_from_tiles(assoc, filt='ir', clean=True):
     """
     Get tiles overlapping visit footprint
     """
@@ -274,8 +492,8 @@ def cosmos_mosaic_from_tiles(assoc, filt='ir', clean=True):
     import astropy.io.fits as pyfits
     import astropy.table
     
-    olap_tiles = db.SQL(f"""SELECT DISTINCT(tile)
-                        FROM cosmos_tiles t, exposure_files e
+    olap_tiles = db.SQL(f"""SELECT tile, field
+                        FROM combined_tiles t, exposure_files e
                         WHERE e.assoc = '{assoc}'
                         AND polygon(e.footprint) && polygon(t.footprint)
                         """)
@@ -289,15 +507,17 @@ def cosmos_mosaic_from_tiles(assoc, filt='ir', clean=True):
     nx = tx.max()-tx.min()+1
     ny = ty.max()-ty.min()+1
     
+    field = olap_tiles['field'][0]
     for t in olap_tiles['tile']:
-        os.system(f"""aws s3 sync s3://grizli-v2/HST/Cosmos/Tiles/ ./
+        os.system(f"""aws s3 sync s3://grizli-v2/ClusterTiles/{field}/ ./
                           --exclude "*"
-                          --include "*{t}-{filt}*_dr?*fits.gz"
-                          --include "*{t}-ir_seg.fits.gz"
+                          --include "{field}*{t}-{filt}*_dr?*fits.gz"
+                          --include "{field}*{t}-ir_seg.fits.gz"
                           """.replace('\n', ' '))
         
-    wcs = db.SQL(f"""SELECT * FROM cosmos_tiles 
-                     WHERE tile = '{xm:02d}.{ym:02d}'""")
+    wcs = db.SQL(f"""SELECT * FROM combined_tiles 
+                     WHERE tile = '{xm:02d}.{ym:02d}'
+                     AND field = '{field}'""")
     
     h = pyfits.Header()
     for c in wcs.colnames:
@@ -318,7 +538,7 @@ def cosmos_mosaic_from_tiles(assoc, filt='ir', clean=True):
     seg = np.zeros(img_shape, dtype=int)
     
     for tile, txi, tyi in zip(olap_tiles['tile'], tx, ty):
-        _file = f'cos-tile-{txi:02d}.{tyi:02d}-{filt}_dr*_sci.fits.gz'
+        _file = f'{field}-080-{txi:02d}.{tyi:02d}-{filt}_dr*_sci.fits.gz'
         _files = glob.glob(_file)
         if len(_files) == 0:
             msg = f'*ERROR* {_file} not found'
@@ -357,7 +577,7 @@ def cosmos_mosaic_from_tiles(assoc, filt='ir', clean=True):
     
     if clean:
         for tile, txi, tyi in zip(olap_tiles['tile'], tx, ty):
-            files = glob.glob(f'cos-tile-{txi:02d}.{tyi:02d}-{filt}*')
+            files = glob.glob(f'cos-080-{txi:02d}.{tyi:02d}-{filt}*')
             for file in files:
                 msg = f'rm {file}'
                 utils.log_comment(utils.LOGFILE, msg, verbose=True)
@@ -393,7 +613,7 @@ def cosmos_mosaic_from_tiles(assoc, filt='ir', clean=True):
     tabs = []
     for tile, txi, tyi in zip(olap_tiles['tile'], tx, ty):
         
-        _SQL = f"SELECT {scols} from cosmos_tile_phot where tile = '{tile}'"
+        _SQL = f"SELECT {scols} from combined_tile_phot where tile = '{tile}'"
         tab = db.SQL(_SQL)
                 
         # Pixel offsets
@@ -524,8 +744,8 @@ def check_phot():
     ph = db.SQL("""
 select p.tile, mag_auto, flu
 _radius, flux_auto, flux_aper_1, f105w_tot_corr, f125w_tot_corr, f140w_tot_corr, f160w_tot_corr, f105w_flux_aper_1, f105w_fluxerr_aper_1, f125w_flux_aper_1, f125w_fluxerr_aper_1, f140w_flux_aper_1, f140w_fluxerr_aper_1, f160w_flux_aper_1, f160w_fluxerr_aper_1, f814w_fluxerr_aper_1, f814w_flux_aper_1, f850lp_flux_aper_1, f850lp_fluxerr_aper_1, f850lp_tot_corr, f606w_fluxerr_aper_1, f435w_fluxerr_aper_1, id, ra, dec
-    from cosmos_tile_phot p, cosmos_tiles t
-    where p.tile = t.tile
+    FROM combined_tile_phot p, combined_tiles t
+    WHERE p.tile = t.tile AND p.field = t.field
     AND status = 2
     AND mag_auto > 18 and mag_auto < 24 
     """)
@@ -586,14 +806,26 @@ def compare_to_deeper():
     mb0 = multifit.MultiBeam(f'{deep_visit}_{id:05d}.beams.fits', **args0)
     mb1 = multifit.MultiBeam(f'{dash_visit}_{id:05d}.beams.fits', **args1)
     
-    s0 = mb0.oned_spectrum()['G141']
-    s1 = mb1.oned_spectrum()['G141']
+    tfit0 = mb0.template_at_z(0.6091, templates=args0['t1'])
+    tfit1 = mb1.template_at_z(0.6091, templates=args0['t1'])
+    
+    s0 = mb0.oned_spectrum(tfit=tfit0)['G141']
+    s1 = mb1.oned_spectrum(tfit=tfit1)['G141']
     
     plt.plot(s0['wave'], s0['flux'])
     plt.plot(s1['wave'], s1['flux'])
     
+    plt.plot(s0['wave'], s0['cont'])
+    plt.plot(s1['wave'], s1['cont'])
+    
+    if 0:
+        plt.plot(s0['wave'], s0['cont'] + np.random.normal(size=len(s0))*s0['err'])
+        plt.plot(s1['wave'], s1['cont'] + np.random.normal(size=len(s1))*s1['err'])
+    
     plt.plot(s0['wave'], s0['err'])
     plt.plot(s1['wave'], s1['err'])
     
+    plt.plot(s0['wave'], s0['flux']/s0['err'])
+    plt.plot(s1['wave'], s1['flux']/s1['err'])
     
     

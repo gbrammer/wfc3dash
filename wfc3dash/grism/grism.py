@@ -351,7 +351,7 @@ tile_mosaics=True, refine_mag_limits=[18,23], **kwargs):
     
     """
     import golfir.catalog
-    from . import tiles as cosmos_tiles
+    from . import tiles as mosaic_tiles
     
     global PATHS
     
@@ -376,7 +376,7 @@ tile_mosaics=True, refine_mag_limits=[18,23], **kwargs):
     if not os.path.exists(f'{root}-{direct_filt}_drz_sci.fits'):
         if tile_mosaics:
             #### Build mosaic from pre-drizzled tiles and catalog
-            cosmos_tiles.cosmos_mosaic_from_tiles(assoc, filt=direct_filt)
+            mosaic_tiles.create_mosaic_from_tiles(assoc, filt=direct_filt)
         else:
             ### Drizzle reference mosaic from imaging exposures
             _h, ir_wcs = utils.make_maximal_wcs(grism_files, pixel_scale=0.1, 
