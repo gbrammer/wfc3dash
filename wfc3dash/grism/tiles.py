@@ -430,6 +430,8 @@ def process_tile(field='cos', tile='01.01', filters=TILE_FILTERS, fetch_existing
                          make_ir_filters=True, 
                          make_opt_filters=True)
     
+    print(f'Sync ./{root}-tiles/ >> s3://grizli-v2/ClusterTiles/Map/{field}/')
+    
     os.system(f'aws s3 sync ./{root}-tiles/ ' + 
               f' s3://grizli-v2/ClusterTiles/Map/{field}/ ' + 
                '--acl public-read --quiet')
