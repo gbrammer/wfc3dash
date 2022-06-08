@@ -138,7 +138,8 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
     #### Visit log
     files = []
     for v in visits:
-        files.extend([os.path.join('./Prep/', f) for f in v['files']])
+        #files.extend([os.path.join('./Prep/', f) for f in v['files']])
+        files.extend([f for f in v['files']])
     
     info = utils.get_flt_info(files)
     
@@ -174,12 +175,9 @@ def process_association(assoc='j100028p0215_0619_ehn_cosmos-g141-101_wfc3ir_g141
         visit_processor.exposure_info_from_visit(visit, assoc=assoc)
     
     ## files to s3
-    os.system(f"""aws s3 sync ./ s3://grizli-v2/HST/Pipeline/{assoc}/Prep/ \ 
-                              --exclude "*" \
-                              --include "iehn*png" \
-                              --include "iehn*txt" \
-                              --include "*yaml"
-                              """)
+    os.system(f'aws s3 sync ./ s3://grizli-v2/HST/Pipeline/{assoc}/Prep/' + 
+              ' --exclude "*" --include "iehn*png"' + 
+              ' --include "iehn*txt" --include "*yaml"')
     
     #### Contamination model, etc.    
     compute_grism_contamination(assoc, **kwargs)
