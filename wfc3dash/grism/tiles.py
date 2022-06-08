@@ -548,6 +548,8 @@ def create_mosaic_from_tiles(assoc, filt='ir', clean=True):
     nx = tx.max()-tx.min()+1
     ny = ty.max()-ty.min()+1
     
+    print(olap_tiles)
+    
     field = olap_tiles['field'][0]
     for t in olap_tiles['tile']:
         # print(f'Fetch tile s3://grizli-v2/ClusterTiles/{field}/{field}-080-{t}-{filt}*')
@@ -576,14 +578,17 @@ def create_mosaic_from_tiles(assoc, filt='ir', clean=True):
     xnpix = h['NAXIS1']
     ynpix = h['NAXIS2']
     
-    h['NAXIS1'] *= nx
-    h['NAXIS2'] *= ny
+    olap = 256
+    pad = 32
+    
+    h['NAXIS1'] = h['NAXIS1']*nx - olap*(nx-1)
+    h['NAXIS2'] = h['NAXIS2']*ny - olap*(ny-1)
     
     img_shape = (h['NAXIS2'], h['NAXIS1'])
     sci = np.zeros(img_shape, dtype=np.float32)
     wht = np.zeros(img_shape, dtype=np.float32)
     seg = np.zeros(img_shape, dtype=int)
-    
+        
     for tile, txi, tyi in zip(olap_tiles['tile'], tx, ty):
         _file = f'{field}-080-{txi:02d}.{tyi:02d}-{filt}_dr*_sci.fits.gz'
         _files = glob.glob(_file)
@@ -598,20 +603,26 @@ def create_mosaic_from_tiles(assoc, filt='ir', clean=True):
         utils.log_comment(utils.LOGFILE, msg, verbose=True)
 
         im = pyfits.open(file)
-        slx = slice((txi-xm)*xnpix, (txi-xm+1)*xnpix)
-        sly = slice((tyi-ym)*ynpix, (tyi-ym+1)*ynpix)      
+        
+        olap_dx = (txi-xm)*olap
+        olap_dy = (tyi-ym)*olap
+        
+        slx = slice((txi-xm)*xnpix - olap_dx + pad,
+                    (txi-xm+1)*xnpix - olap_dx)
+        sly = slice((tyi-ym)*ynpix - olap_dy + pad,
+                    (tyi-ym+1)*ynpix - olap_dy)
         
         for k in im[0].header:
             if k not in h:
                 h[k] = im[0].header[k]
                 
-        sci[sly, slx] += im[0].data
+        sci[sly, slx] = im[0].data[pad:, pad:]*1
 
         im = pyfits.open(file.replace('_sci','_wht'))
-        wht[sly, slx] += im[0].data
+        wht[sly, slx] = im[0].data[pad:, pad:]**1
 
         im = pyfits.open(file.replace('_drz_sci','_seg'))
-        seg[sly, slx] += im[0].data
+        seg[sly, slx] = im[0].data[pad:, pad:]**1
     
     _hdu = pyfits.PrimaryHDU(data=sci, header=h)
     _hdu.writeto(f'{assoc}-{filt}_drz_sci.fits', overwrite=True)
@@ -660,12 +671,19 @@ def create_mosaic_from_tiles(assoc, filt='ir', clean=True):
     tabs = []
     for tile, txi, tyi in zip(olap_tiles['tile'], tx, ty):
         
-        _SQL = f"SELECT {scols} from combined_tile_phot where tile = '{tile}'"
+        _SQL = f"""SELECT {scols} from combined_tile_phot
+                   where tile = '{tile}'
+                   AND x < 2048 AND y < 2048
+                   AND x > {pad} AND y > {pad}"""
+                   
         tab = db.SQL(_SQL)
                 
         # Pixel offsets
-        dx = (txi-xm)*4096
-        dy = (tyi-ym)*4096
+        olap_dx = (txi-xm)*olap
+        olap_dy = (tyi-ym)*olap
+
+        dx = (txi-xm)*(2048+olap) - olap_dx
+        dy = (tyi-ym)*(2048+olap) - olap_dx
         
         for c in tab.colnames:
             if c in ['xmin', 'xmax', 'x', 'x_image', 'xpeak', 'xcpeak']:
