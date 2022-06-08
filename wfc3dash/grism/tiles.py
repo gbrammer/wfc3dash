@@ -550,11 +550,15 @@ def create_mosaic_from_tiles(assoc, filt='ir', clean=True):
     
     field = olap_tiles['field'][0]
     for t in olap_tiles['tile']:
-        os.system(f"""aws s3 sync s3://grizli-v2/ClusterTiles/{field}/ ./
-                          --exclude "*"
-                          --include "{field}*{t}-{filt}*_dr?*fits.gz"
-                          --include "{field}*{t}-ir_seg.fits.gz"
-                          """.replace('\n', ' '))
+        os.system(f"aws s3 cp s3://grizli-v2/ClusterTiles/{field}/{field}*{t}-{filt}_drz_sci.fits.gz . ")
+        os.system(f"aws s3 cp s3://grizli-v2/ClusterTiles/{field}/{field}*{t}-{filt}_drz_wht.fits.gz . ")
+        os.system(f"aws s3 cp s3://grizli-v2/ClusterTiles/{field}/{field}*{t}-{filt}_seg.fits.gz . ")
+        
+        # os.system(f"""aws s3 sync s3://grizli-v2/ClusterTiles/{field}/ ./
+        #                   --exclude "*"
+        #                   --include "{field}*{t}-{filt}*_dr?*fits.gz"
+        #                   --include "{field}*{t}-ir_seg.fits.gz"
+        #                   """.replace('\n', ' '))
         
     wcs = db.SQL(f"""SELECT * FROM combined_tiles 
                      WHERE tile = '{xm:02d}.{ym:02d}'
