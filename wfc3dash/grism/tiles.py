@@ -537,7 +537,7 @@ def create_mosaic_from_tiles(assoc, filt='ir', clean=True):
                         FROM combined_tiles t, exposure_files e
                         WHERE e.assoc = '{assoc}'
                         AND polygon(e.footprint) && polygon(t.footprint)
-                        """)
+                        GROUP BY tile, field""")
     
     tx = np.array([int(t.split('.')[0]) for t in olap_tiles['tile']])
     ty = np.array([int(t.split('.')[1]) for t in olap_tiles['tile']])
@@ -550,17 +550,17 @@ def create_mosaic_from_tiles(assoc, filt='ir', clean=True):
     
     field = olap_tiles['field'][0]
     for t in olap_tiles['tile']:
-        print(f'Fetch tile s3://grizli-v2/ClusterTiles/{field}/{field}-080-{t}-{filt}*')
+        # print(f'Fetch tile s3://grizli-v2/ClusterTiles/{field}/{field}-080-{t}-{filt}*')
+        # 
+        # os.system(f"aws s3 cp s3://grizli-v2/ClusterTiles/{field}/{field}-080-{t}-{filt}_drz_sci.fits.gz . ")
+        # os.system(f"aws s3 cp s3://grizli-v2/ClusterTiles/{field}/{field}-080-{t}-{filt}_drz_wht.fits.gz . ")
+        # os.system(f"aws s3 cp s3://grizli-v2/ClusterTiles/{field}/{field}-080-{t}-{filt}_seg.fits.gz . ")
         
-        os.system(f"aws s3 cp s3://grizli-v2/ClusterTiles/{field}/{field}-080-{t}-{filt}_drz_sci.fits.gz . ")
-        os.system(f"aws s3 cp s3://grizli-v2/ClusterTiles/{field}/{field}-080-{t}-{filt}_drz_wht.fits.gz . ")
-        os.system(f"aws s3 cp s3://grizli-v2/ClusterTiles/{field}/{field}-080-{t}-{filt}_seg.fits.gz . ")
-        
-        # os.system(f"""aws s3 sync s3://grizli-v2/ClusterTiles/{field}/ ./
-        #                   --exclude "*"
-        #                   --include "{field}*{t}-{filt}*_dr?*fits.gz"
-        #                   --include "{field}*{t}-ir_seg.fits.gz"
-        #                   """.replace('\n', ' '))
+        os.system(f"""aws s3 sync s3://grizli-v2/ClusterTiles/{field}/ ./
+                          --exclude "*"
+                          --include "{field}*{t}-{filt}*_dr?*fits.gz"
+                          --include "{field}*{t}-ir_seg.fits.gz"
+                          """.replace('\n', ' '))
         
     wcs = db.SQL(f"""SELECT * FROM combined_tiles 
                      WHERE tile = '{xm:02d}.{ym:02d}'
