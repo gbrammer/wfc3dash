@@ -337,7 +337,7 @@ def align_visit(visit, flag_crs=True, driz_cr_kwargs={'driz_cr_snr_grow':3}, **k
 
 
 def compute_grism_contamination(assoc, filters=['F814W','F105W','F140W','F125W','F160W'], grism_files=None, phot_kwargs={}, direct_filt='ir', 
-tile_mosaics=True, refine_mag_limits=[18,23], refine_niter=2, **kwargs):
+tile_mosaics=True, refine_mag_limits=[16,23], refine_niter=2, **kwargs):
     """
     Extra steps for grism processing:
     
