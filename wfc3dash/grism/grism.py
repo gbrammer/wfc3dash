@@ -337,7 +337,7 @@ def align_visit(visit, flag_crs=True, driz_cr_kwargs={'driz_cr_snr_grow':3}, **k
 
 
 def compute_grism_contamination(assoc, filters=['F814W','F105W','F140W','F125W','F160W'], grism_files=None, phot_kwargs={}, direct_filt='ir', 
-tile_mosaics=True, refine_mag_limits=[18,23], **kwargs):
+tile_mosaics=True, refine_mag_limits=[18,23], refine_niter=2, **kwargs):
     """
     Extra steps for grism processing:
     
@@ -397,10 +397,13 @@ tile_mosaics=True, refine_mag_limits=[18,23], **kwargs):
     grp = auto_script.grism_prep(field_root=root, 
                                  gris_ref_filters={'G141':[direct_filt]},
                                  files=grism_files,
-                                 refine_mag_limits=refine_mag_limits)
+                                 refine_mag_limits=refine_mag_limits,
+                                 refine_niter=refine_niter)
     
     #### Drizzled grp objects
     if len(glob.glob(f'{root}*_grism*fits*')) == 0:
+        del(grp)
+
         grism_files = glob.glob('*GrismFLT.fits')
         grism_files.sort()
 

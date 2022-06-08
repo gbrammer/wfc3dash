@@ -588,7 +588,9 @@ def create_mosaic_from_tiles(assoc, filt='ir', clean=True):
     sci = np.zeros(img_shape, dtype=np.float32)
     wht = np.zeros(img_shape, dtype=np.float32)
     seg = np.zeros(img_shape, dtype=int)
-        
+    
+    skip_tiles = []
+    
     for tile, txi, tyi in zip(olap_tiles['tile'], tx, ty):
         _file = f'{field}-080-{txi:02d}.{tyi:02d}-{filt}_dr*_sci.fits.gz'
         _files = glob.glob(_file)
@@ -603,7 +605,11 @@ def create_mosaic_from_tiles(assoc, filt='ir', clean=True):
         utils.log_comment(utils.LOGFILE, msg, verbose=True)
 
         im = pyfits.open(file)
-        
+        if im[0].shape[0] != xnpix:
+            print(f'Bad size ({im[0].data.shape})')
+            skip_tiles.append(tile)
+            continue
+            
         olap_dx = (txi-xm)*olap
         olap_dy = (tyi-ym)*olap
         
@@ -670,7 +676,9 @@ def create_mosaic_from_tiles(assoc, filt='ir', clean=True):
     
     tabs = []
     for tile, txi, tyi in zip(olap_tiles['tile'], tx, ty):
-        
+        if tile in skip_tiles:
+            continue
+            
         _SQL = f"""SELECT {scols} from combined_tile_phot
                    where tile = '{tile}'
                    AND x < 2048 AND y < 2048
@@ -701,8 +709,10 @@ def create_mosaic_from_tiles(assoc, filt='ir', clean=True):
         tab.rename_column(c, c.upper())
     
     # Make it look as expected for grizli model
-    tab['MAG_AUTO'] = tab['MAG_AUTO'].filled(99)
+    if hasattr(tab['MAG_AUTO'], 'filled'):
+        tab['MAG_AUTO'] = tab['MAG_AUTO'].filled(99)
     tab.rename_column('ID','NUMBER')
+    tab['NUMBER'] = tab['NUMBER'].astype(int)
     tab.write(f'{assoc}-ir.cat.fits', overwrite=True)
     
     ### Grism
