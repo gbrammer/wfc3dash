@@ -135,5 +135,5 @@ def split_ima_flt(file='icxe15x0q_ima.fits', skip_first_read=True):
         h_time['NPIX2'] = 1014
         
         hdu.append(pyfits.ImageHDU(header=h_time))
-        hdu.writeto('%s%s_flt.fits' %(root, letters[i-1]), clobber=True)
+        hdu.writeto('%s%s_flt.fits' %(root, letters[i-1]), overwrite=True)
         print('%s%s_flt.fits' %(root, letters[i-1]))
