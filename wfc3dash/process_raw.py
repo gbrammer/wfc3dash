@@ -119,8 +119,9 @@ def split_ima_flt(file='icxe15x0q_ima.fits', skip_first_read=True):
     final_dq = dq[1:,:,:]*1
     final_dq -= (final_dq & 2048)
     
-    h_sci['CRPIX1'] = 507
-    h_sci['CRPIX2'] = 507
+    # Account for overscan
+    h_sci['CRPIX1'] -= 5
+    h_sci['CRPIX2'] -= 5
     letters = 'abcdefghijklmno'
     for i in range(1*skip_first_read,NSAMP-1):
         h_0['EXPTIME'] = final_exptime[i]
@@ -135,5 +136,5 @@ def split_ima_flt(file='icxe15x0q_ima.fits', skip_first_read=True):
         h_time['NPIX2'] = 1014
         
         hdu.append(pyfits.ImageHDU(header=h_time))
-        hdu.writeto('%s%s_flt.fits' %(root, letters[i-1]), clobber=True)
+        hdu.writeto('%s%s_flt.fits' %(root, letters[i-1]), overwrite=True)
         print('%s%s_flt.fits' %(root, letters[i-1]))
